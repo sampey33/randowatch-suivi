@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RandoWatch - Suivi en direct</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+        #header {
+            background: #16213e;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #0f3460;
+        }
+        #header h1 { font-size: 18px; color: #4CAF50; }
+        #status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        #statusDot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #888;
+        }
+        #statusDot.active { background: #4CAF50; animation: pulse 1.5s infinite; }
+        #statusDot.inactive { background: #FF4444; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        #map { flex: 1; }
+        #infoBar {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            border-top: 1px solid #0f3460;
+        }
+        #infoBar span { color: #aaa; }
+        #infoBar strong { color: #fff; }
+        #lastUpdate { font-size: 11px; color: #888; }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>🥾 RandoWatch - Suivi en direct</h1>
+    <div id="status">
+        <div id="statusDot"></div>
+        <span id="statusText">En attente...</span>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<div id="infoBar">
+    <div><span>Latitude : </span><strong id="lat">--</strong></div>
+    <div><span>Longitude : </span><strong id="lon">--</strong></div>
+    <div><span id="lastUpdate">Derniere mise a jour : --</span></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDsi0WLkIKL1lp8WSxwVYTV4ONldZMOLH8",
+        authDomain: "randowatch-541ef.firebaseapp.com",
+        databaseURL: "https://randowatch-541ef-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "randowatch-541ef",
+        storageBucket: "randowatch-541ef.firebasestorage.app",
+        messagingSenderId: "713345057483",
+        appId: "1:713345057483:web:8d3365c00888cd047d514e"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Carte Leaflet
+    const map = L.map('map').setView([44.3, 2.7], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // Marqueur position
+    const icon = L.divIcon({
+        html: `<div style="width:16px;height:16px;background:#4CAF50;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(76,175,80,0.8)"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+        className: ''
+    });
+    let marker = null;
+    let circle = null;
+
+    // Écouter Firebase
+    const posRef = ref(db, 'position');
+    onValue(posRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+            document.getElementById('statusDot').className = 'inactive';
+            document.getElementById('statusText').textContent = 'Suivi inactif';
+            return;
+        }
+
+        const lat = data.lat;
+        const lon = data.lon;
+        const ts = data.timestamp;
+
+        // Mettre à jour le marqueur
+        if (!marker) {
+            marker = L.marker([lat, lon], { icon }).addTo(map);
+            circle = L.circle([lat, lon], { radius: 20, color: '#4CAF50', fillOpacity: 0.1 }).addTo(map);
+            map.setView([lat, lon], 15);
+        } else {
+            marker.setLatLng([lat, lon]);
+            circle.setLatLng([lat, lon]);
+            map.panTo([lat, lon]);
+        }
+
+        // Mettre à jour les infos
+        document.getElementById('lat').textContent = lat.toFixed(5);
+        document.getElementById('lon').textContent = lon.toFixed(5);
+        document.getElementById('statusDot').className = 'active';
+        document.getElementById('statusText').textContent = 'En direct';
+
+        const date = new Date(ts);
+        document.getElementById('lastUpdate').textContent =
+            `Derniere mise a jour : ${date.toLocaleTimeString('fr-FR')}`;
+    });
+</script>
+
+</body>
+</html>
