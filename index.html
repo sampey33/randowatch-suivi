@@ -6,73 +6,143 @@
     <title>RandoWatch - Suivi en direct</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
         #header {
             background: #16213e;
-            padding: 12px 20px;
+            padding: 10px 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid #0f3460;
+            flex-shrink: 0;
         }
-        #header h1 { font-size: 18px; color: #4CAF50; }
-        #status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-        }
-        #statusDot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #888;
-        }
+        #header h1 { font-size: 16px; color: #4CAF50; }
+        #status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        #statusDot { width: 10px; height: 10px; border-radius: 50%; background: #888; }
         #statusDot.active { background: #4CAF50; animation: pulse 1.5s infinite; }
         #statusDot.inactive { background: #FF4444; }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        #tabs { display: flex; background: #16213e; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+        .tab-btn { flex: 1; padding: 10px; background: none; border: none; color: #aaa; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: #4CAF50; border-bottom-color: #4CAF50; }
+
+        #panel-live, #panel-history { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        #panel-live.active, #panel-history.active { display: flex; }
+
+        /* LIVE */
         #map { flex: 1; }
-        #infoBar {
-            background: #16213e;
-            padding: 10px 20px;
-            display: flex;
-            gap: 20px;
-            font-size: 13px;
-            border-top: 1px solid #0f3460;
-        }
+        #infoBar { background: #16213e; padding: 8px 20px; display: flex; gap: 20px; font-size: 13px; border-top: 1px solid #0f3460; flex-shrink: 0; }
         #infoBar span { color: #aaa; }
         #infoBar strong { color: #fff; }
-        #lastUpdate { font-size: 11px; color: #888; }
+        #bpmChart-container { background: #16213e; padding: 8px 16px; height: 90px; flex-shrink: 0; border-top: 1px solid #0f3460; }
+
+        /* HISTORY */
+        #panel-history { flex-direction: row; }
+
+        #session-list { width: 210px; background: #16213e; border-right: 1px solid #0f3460; overflow-y: auto; flex-shrink: 0; }
+        #session-list h2 { padding: 12px 16px; font-size: 13px; color: #aaa; border-bottom: 1px solid #0f3460; }
+        .session-item { padding: 10px 16px; border-bottom: 1px solid #0f3460; cursor: pointer; transition: background 0.2s; }
+        .session-item:hover { background: #1c2a45; }
+        .session-item.selected { background: #1a3a22; border-left: 3px solid #4CAF50; }
+        .session-date { font-size: 12px; color: #4CAF50; font-weight: bold; }
+        .session-info { font-size: 11px; color: #aaa; margin-top: 3px; }
+        .session-delete { float: right; background: #f85149; border: none; color: #fff; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 11px; }
+        .session-delete:hover { background: #c0392b; }
+        #no-sessions { padding: 20px 16px; color: #666; font-size: 12px; }
+
+        /* Detail = carte + courbe verticale */
+        #history-detail { flex: 1; display: flex; flex-direction: row; overflow: hidden; }
+
+        #history-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #history-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: #555; font-size: 14px; }
+        #history-map { flex: 1; display: none; }
+        #history-infoBar { display: none; background: #16213e; padding: 8px 16px; gap: 16px; font-size: 12px; border-top: 1px solid #0f3460; flex-shrink: 0; flex-wrap: wrap; }
+        #history-infoBar span { color: #aaa; }
+        #history-infoBar strong { color: #fff; }
+
+        /* Courbe verticale BPM */
+        #history-chart-panel {
+            display: none;
+            width: 72px;
+            background: #16213e;
+            border-left: 1px solid #0f3460;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 4px 4px 4px;
+            flex-shrink: 0;
+        }
+        #history-chart-panel .chart-title { font-size: 9px; color: #aaa; margin-bottom: 4px; text-align: center; line-height: 1.2; }
+        #history-chart-panel .chart-hint { font-size: 8px; color: #555; text-align: center; margin-bottom: 4px; }
+        #historyBpmChart { flex: 1; width: 100% !important; cursor: crosshair; }
+        #click-info { font-size: 9px; color: #4CAF50; text-align: center; margin-top: 4px; min-height: 28px; line-height: 1.3; }
     </style>
 </head>
 <body>
 
 <div id="header">
-    <h1>🥾 RandoWatch - Suivi en direct</h1>
+    <h1>🥾 RandoWatch</h1>
     <div id="status">
         <div id="statusDot"></div>
         <span id="statusText">En attente...</span>
     </div>
 </div>
 
-<div id="map"></div>
+<div id="tabs">
+    <button class="tab-btn active" onclick="showTab('live')">📍 En direct</button>
+    <button class="tab-btn" onclick="showTab('history')">📋 Historique</button>
+</div>
 
-<div id="infoBar">
-    <div><span>Latitude : </span><strong id="lat">--</strong></div>
-    <div><span>Longitude : </span><strong id="lon">--</strong></div>
-    <div><span>❤️ </span><strong id="hr">--</strong></div>
-    <div><span id="lastUpdate">Derniere mise a jour : --</span></div>
+<!-- LIVE -->
+<div id="panel-live" class="active">
+    <div id="map"></div>
+    <div id="infoBar">
+        <div><span>Lat : </span><strong id="lat">--</strong></div>
+        <div><span>Lon : </span><strong id="lon">--</strong></div>
+        <div><span>❤️ </span><strong id="hr">--</strong></div>
+        <div><span id="lastUpdate">--</span></div>
+    </div>
+    <div id="bpmChart-container">
+        <canvas id="bpmChart"></canvas>
+    </div>
+</div>
+
+<!-- HISTORY -->
+<div id="panel-history">
+    <div id="session-list">
+        <h2>Sessions</h2>
+        <div id="no-sessions">Aucune session</div>
+    </div>
+
+    <div id="history-detail">
+        <div id="history-main">
+            <div id="history-placeholder">← Sélectionne une session</div>
+            <div id="history-map"></div>
+            <div id="history-infoBar">
+                <div><span>Durée : </span><strong id="h-duration">--</strong></div>
+                <div><span>Points : </span><strong id="h-points">--</strong></div>
+                <div><span>❤️ moy : </span><strong id="h-hr-avg">--</strong></div>
+                <div><span>❤️ max : </span><strong id="h-hr-max">--</strong></div>
+            </div>
+        </div>
+
+        <!-- Courbe BPM verticale -->
+        <div id="history-chart-panel">
+            <div class="chart-title">❤️ BPM</div>
+            <div class="chart-hint">Cliquer pour localiser</div>
+            <canvas id="historyBpmChart"></canvas>
+            <div id="click-info"></div>
+        </div>
+    </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+    import { getDatabase, ref, onValue, remove, get } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDsi0WLkIKL1lp8WSxwVYTV4ONldZMOLH8",
@@ -87,59 +157,222 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Carte Leaflet
-    const map = L.map('map').setView([44.3, 2.7], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
+    // TABS
+    window.showTab = function(tab) {
+        document.querySelectorAll('.tab-btn').forEach((b, i) => {
+            b.classList.toggle('active', (i === 0 && tab === 'live') || (i === 1 && tab === 'history'));
+        });
+        document.getElementById('panel-live').classList.toggle('active', tab === 'live');
+        document.getElementById('panel-history').classList.toggle('active', tab === 'history');
+        if (tab === 'live') setTimeout(() => liveMap.invalidateSize(), 100);
+        if (tab === 'history') { loadSessions(); if (historyMap) setTimeout(() => historyMap.invalidateSize(), 100); }
+    };
 
-    // Marqueur position
-    const icon = L.divIcon({
-        html: `<div style="width:16px;height:16px;background:#4CAF50;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(76,175,80,0.8)"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8],
-        className: ''
+    // LIVE MAP
+    const liveMap = L.map('map').setView([44.3, 2.7], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(liveMap);
+    const liveIcon = L.divIcon({
+        html: `<div style="width:14px;height:14px;background:#4CAF50;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(76,175,80,0.8)"></div>`,
+        iconSize: [14, 14], iconAnchor: [7, 7], className: ''
     });
-    let marker = null;
-    let circle = null;
+    let liveMarker = null;
+    let livePolyline = L.polyline([], { color: '#4CAF50', weight: 3 }).addTo(liveMap);
+    let livePoints = [];
 
-    // Écouter Firebase
-    const posRef = ref(db, 'position');
-    onValue(posRef, (snapshot) => {
+    // LIVE BPM CHART
+    const bpmCtx = document.getElementById('bpmChart').getContext('2d');
+    const bpmChart = new Chart(bpmCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.1)', borderWidth: 1.5, pointRadius: 0, tension: 0.3 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#555', maxTicksLimit: 5, font: { size: 9 } }, grid: { color: '#222' } },
+                y: { ticks: { color: '#aaa', font: { size: 9 } }, grid: { color: '#222' }, min: 40 }
+            }
+        }
+    });
+
+    // FIREBASE LIVE
+    onValue(ref(db, 'position'), (snapshot) => {
         const data = snapshot.val();
         if (!data) {
             document.getElementById('statusDot').className = 'inactive';
             document.getElementById('statusText').textContent = 'Suivi inactif';
             return;
         }
-
-        const lat = data.lat;
-        const lon = data.lon;
-        const ts = data.timestamp;
-
-        // Mettre à jour le marqueur
-        if (!marker) {
-            marker = L.marker([lat, lon], { icon }).addTo(map);
-            circle = L.circle([lat, lon], { radius: 20, color: '#4CAF50', fillOpacity: 0.1 }).addTo(map);
-            map.setView([lat, lon], 15);
-        } else {
-            marker.setLatLng([lat, lon]);
-            circle.setLatLng([lat, lon]);
-            map.panTo([lat, lon]);
-        }
-
-        // Mettre à jour les infos
+        const { lat, lon, timestamp: ts, heartRate: hr } = data;
+        if (!liveMarker) {
+            liveMarker = L.marker([lat, lon], { icon: liveIcon }).addTo(liveMap);
+            liveMap.setView([lat, lon], 15);
+        } else { liveMarker.setLatLng([lat, lon]); liveMap.panTo([lat, lon]); }
+        livePoints.push([lat, lon]);
+        livePolyline.setLatLngs(livePoints);
         document.getElementById('lat').textContent = lat.toFixed(5);
         document.getElementById('lon').textContent = lon.toFixed(5);
-        const hr = data.heartRate;
         document.getElementById('hr').textContent = hr ? `${hr} bpm` : '--';
         document.getElementById('statusDot').className = 'active';
         document.getElementById('statusText').textContent = 'En direct';
-
         const date = new Date(ts);
-        document.getElementById('lastUpdate').textContent =
-            `Derniere mise a jour : ${date.toLocaleTimeString('fr-FR')}`;
+        document.getElementById('lastUpdate').textContent = `MAJ : ${date.toLocaleTimeString('fr-FR')}`;
+        if (hr && hr > 0) {
+            bpmChart.data.labels.push(date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+            bpmChart.data.datasets[0].data.push(hr);
+            if (bpmChart.data.labels.length > 60) { bpmChart.data.labels.shift(); bpmChart.data.datasets[0].data.shift(); }
+            bpmChart.update();
+        }
     });
+
+    // HISTORY
+    let historyMap = null;
+    let historyBpmChart = null;
+    let clickMarker = null;
+    let currentPoints = [];
+
+    async function loadSessions() {
+        const snap = await get(ref(db, 'historique'));
+        const container = document.getElementById('session-list');
+        container.querySelectorAll('.session-item').forEach(e => e.remove());
+        const noSessions = document.getElementById('no-sessions');
+        if (!snap.exists()) { noSessions.style.display = 'block'; return; }
+        noSessions.style.display = 'none';
+
+        const sessions = snap.val();
+        Object.keys(sessions).sort().reverse().forEach(sessionId => {
+            const points = Object.values(sessions[sessionId]).sort((a, b) => a.timestamp - b.timestamp);
+            const date = new Date(points[0].timestamp);
+            const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            const hrValues = points.map(p => p.heartRate).filter(h => h && h > 0);
+            const hrAvg = hrValues.length ? Math.round(hrValues.reduce((a, b) => a + b, 0) / hrValues.length) : '--';
+
+            const item = document.createElement('div');
+            item.className = 'session-item';
+            item.innerHTML = `
+                <button class="session-delete">✕</button>
+                <div class="session-date">${dateStr} ${timeStr}</div>
+                <div class="session-info">${points.length} pts · ❤️ ${hrAvg} bpm</div>
+            `;
+            item.querySelector('.session-delete').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (confirm('Supprimer cette session ?')) {
+                    await remove(ref(db, `historique/${sessionId}`));
+                    loadSessions();
+                    resetDetail();
+                }
+            });
+            item.addEventListener('click', () => showSession(points, item));
+            container.appendChild(item);
+        });
+    }
+
+    function resetDetail() {
+        document.getElementById('history-placeholder').style.display = 'flex';
+        document.getElementById('history-map').style.display = 'none';
+        document.getElementById('history-infoBar').style.display = 'none';
+        document.getElementById('history-chart-panel').style.display = 'none';
+    }
+
+    function showSession(points, item) {
+        document.querySelectorAll('.session-item').forEach(e => e.classList.remove('selected'));
+        item.classList.add('selected');
+        currentPoints = points;
+
+        document.getElementById('history-placeholder').style.display = 'none';
+        document.getElementById('history-map').style.display = 'block';
+        document.getElementById('history-infoBar').style.display = 'flex';
+        document.getElementById('history-chart-panel').style.display = 'flex';
+
+        // Carte
+        if (!historyMap) {
+            historyMap = L.map('history-map').setView([44.3, 2.7], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(historyMap);
+        }
+        historyMap.eachLayer(layer => { if (!(layer instanceof L.TileLayer)) historyMap.removeLayer(layer); });
+        clickMarker = null;
+        setTimeout(() => historyMap.invalidateSize(), 100);
+
+        const latLngs = points.map(p => [p.lat, p.lon]);
+        const poly = L.polyline(latLngs, { color: '#58a6ff', weight: 3 }).addTo(historyMap);
+        if (latLngs.length > 0) historyMap.fitBounds(poly.getBounds(), { padding: [20, 20] });
+
+        // Marqueurs départ/arrivée
+        const startIcon = L.divIcon({ html: `<div style="background:#4CAF50;color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold">D</div>`, iconSize: [18, 18], iconAnchor: [9, 9], className: '' });
+        const endIcon = L.divIcon({ html: `<div style="background:#f85149;color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold">A</div>`, iconSize: [18, 18], iconAnchor: [9, 9], className: '' });
+        if (latLngs.length > 0) L.marker(latLngs[0], { icon: startIcon }).addTo(historyMap).bindPopup('Départ');
+        if (latLngs.length > 1) L.marker(latLngs[latLngs.length - 1], { icon: endIcon }).addTo(historyMap).bindPopup('Arrivée');
+
+        // Stats
+        const hrValues = points.map(p => p.heartRate).filter(h => h && h > 0);
+        document.getElementById('h-duration').textContent = points.length > 1 ? formatDuration(points[points.length - 1].timestamp - points[0].timestamp) : '--';
+        document.getElementById('h-points').textContent = points.length;
+        document.getElementById('h-hr-avg').textContent = hrValues.length ? `${Math.round(hrValues.reduce((a, b) => a + b, 0) / hrValues.length)} bpm` : '--';
+        document.getElementById('h-hr-max').textContent = hrValues.length ? `${Math.max(...hrValues)} bpm` : '--';
+
+        // Courbe BPM verticale (axe X = BPM, axe Y = temps)
+        const hCtx = document.getElementById('historyBpmChart').getContext('2d');
+        if (historyBpmChart) historyBpmChart.destroy();
+
+        const labels = points.map(p => new Date(p.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+        const hrData = points.map(p => p.heartRate || null);
+
+        historyBpmChart = new Chart(hCtx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    data: hrData,
+                    borderColor: '#f85149',
+                    backgroundColor: 'rgba(248,81,73,0.15)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    tension: 0.3,
+                    spanGaps: true,
+                    fill: true
+                }]
+            },
+            options: {
+                indexAxis: 'y', // courbe horizontale mais sur axe vertical
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: {
+                    x: { ticks: { color: '#666', maxTicksLimit: 3, font: { size: 8 } }, grid: { color: '#222' }, min: 40 },
+                    y: { ticks: { display: false }, grid: { display: false }, reverse: false }
+                },
+                onClick: (event, elements) => {
+                    const points2 = historyBpmChart.getElementsAtEventForMode(event, 'index', { intersect: false }, false);
+                    if (points2.length === 0) return;
+                    const idx = points2[0].index;
+                    const pt = currentPoints[idx];
+                    if (!pt || !pt.lat) return;
+
+                    // Marqueur sur la carte
+                    if (clickMarker) historyMap.removeLayer(clickMarker);
+                    const clickIcon = L.divIcon({
+                        html: `<div style="background:#FFDD44;border:2px solid #000;border-radius:50%;width:14px;height:14px;"></div>`,
+                        iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+                    });
+                    clickMarker = L.marker([pt.lat, pt.lon], { icon: clickIcon }).addTo(historyMap);
+                    historyMap.panTo([pt.lat, pt.lon]);
+
+                    const time = new Date(pt.timestamp).toLocaleTimeString('fr-FR');
+                    const hr = pt.heartRate ? `${pt.heartRate} bpm` : '--';
+                    document.getElementById('click-info').textContent = `${time}\n${hr}`;
+                }
+            }
+        });
+    }
+
+    function formatDuration(ms) {
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        return h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
+    }
 </script>
 
 </body>
