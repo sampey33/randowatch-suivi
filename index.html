@@ -184,6 +184,7 @@
     let sosAlarm = null;
     let bpmAlertActive = false;
     let soundEnabled = false;
+    let lastTimestamp = null;
 
     window.toggleSound = function() {
         if (!soundEnabled) {
@@ -396,13 +397,14 @@
     let historyBpmChart = null;
     let clickMarker = null;
     let currentPoints = [];
-    let lastTimestamp = null;
 
     // Vérifier toutes les 10 secondes si les données sont obsolètes
     setInterval(() => {
         if (!lastTimestamp) return;
         const age = Date.now() - lastTimestamp;
+        console.log("age depuis dernière MAJ:", age, "ms");
         if (age > 30000) {
+            console.log("Déclenchement alarme BPM obsolète");
             showBpmAlert(0, null, null);
         }
     }, 10000);
