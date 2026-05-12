@@ -26,16 +26,13 @@
         #panel-live, #panel-history { display: none; flex: 1; flex-direction: column; overflow: hidden; }
         #panel-live.active, #panel-history.active { display: flex; }
 
-        /* LIVE */
         #map { flex: 1; }
         #infoBar { background: #16213e; padding: 8px 20px; display: flex; gap: 20px; font-size: 13px; border-top: 1px solid #0f3460; flex-shrink: 0; }
         #infoBar span { color: #aaa; }
         #infoBar strong { color: #fff; }
         #bpmChart-container { background: #16213e; padding: 8px 16px; height: 90px; flex-shrink: 0; border-top: 1px solid #0f3460; }
 
-        /* HISTORY */
         #panel-history { flex-direction: row; }
-
         #session-list { width: 210px; background: #16213e; border-right: 1px solid #0f3460; overflow-y: auto; flex-shrink: 0; }
         #session-list h2 { padding: 12px 16px; font-size: 13px; color: #aaa; border-bottom: 1px solid #0f3460; }
         .session-item { padding: 10px 16px; border-bottom: 1px solid #0f3460; cursor: pointer; transition: background 0.2s; }
@@ -47,7 +44,6 @@
         .session-delete:hover { background: #c0392b; }
         #no-sessions { padding: 20px 16px; color: #666; font-size: 12px; }
 
-        /* Detail historique = colonne verticale */
         #history-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         #history-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: #555; font-size: 14px; }
         #history-map { flex: 1; display: none; }
@@ -57,9 +53,48 @@
         #history-bpm-container { display: none; background: #16213e; padding: 6px 16px 4px; height: 90px; flex-shrink: 0; border-top: 1px solid #0f3460; position: relative; cursor: crosshair; }
         #history-bpm-container .bpm-hint { position: absolute; top: 4px; right: 12px; font-size: 9px; color: #555; }
         #click-info { position: absolute; top: 4px; left: 12px; font-size: 10px; color: #4CAF50; }
+
+        /* SOS OVERLAY */
+        #sosOverlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            animation: sosBlink 0.8s infinite;
+        }
+        #sosOverlay.active { display: flex; }
+        #sosOverlay.sos-mode { animation: sosBlink 0.8s infinite; }
+        #sosOverlay.bpm-mode { animation: bpmBlink 0.8s infinite; }
+        @keyframes sosBlink { 0%,100% { background: #cc0000; } 50% { background: #ff0000; } }
+        @keyframes bpmBlink { 0%,100% { background: #cc6600; } 50% { background: #ff8800; } }
+
+        #sosTitle { font-size: 48px; font-weight: bold; color: #fff; text-shadow: 0 0 20px rgba(0,0,0,0.5); margin-bottom: 8px; animation: sosPulse 0.8s infinite; }
+        @keyframes sosPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        #sosSubtitle { font-size: 18px; color: #ffcccc; margin-bottom: 24px; text-align: center; padding: 0 20px; }
+        #sosTime { font-size: 13px; color: #ffaaaa; margin-bottom: 8px; }
+        #sosCoords { font-size: 13px; color: #ffdddd; margin-bottom: 32px; }
+        #sosMapContainer { width: 300px; height: 200px; border-radius: 12px; overflow: hidden; border: 3px solid #fff; margin-bottom: 32px; }
+        #sosMap { width: 100%; height: 100%; }
+        #btnCancelSos { background: #fff; color: #cc0000; border: none; padding: 14px 40px; border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        #btnCancelSos:hover { background: #ffeeee; }
     </style>
 </head>
 <body>
+
+<!-- SOS OVERLAY -->
+<div id="sosOverlay">
+    <div id="sosTitle">🆘 SOS 🆘</div>
+    <div id="sosSubtitle">Le porteur a besoin de secours !</div>
+    <div id="sosTime"></div>
+    <div id="sosCoords"></div>
+    <div id="sosMapContainer">
+        <div id="sosMap"></div>
+    </div>
+    <button id="btnCancelSos">✅ Annuler l'alerte</button>
+</div>
 
 <div id="header">
     <h1>🥾 RandoWatch</h1>
@@ -74,7 +109,6 @@
     <button class="tab-btn" onclick="showTab('history')">📋 Historique</button>
 </div>
 
-<!-- LIVE -->
 <div id="panel-live" class="active">
     <div id="map"></div>
     <div id="infoBar">
@@ -88,7 +122,6 @@
     </div>
 </div>
 
-<!-- HISTORY -->
 <div id="panel-history">
     <div id="session-list">
         <h2>Sessions</h2>
@@ -113,7 +146,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getDatabase, ref, onValue, remove, get } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+    import { getDatabase, ref, onValue, remove, get, set } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDsi0WLkIKL1lp8WSxwVYTV4ONldZMOLH8",
@@ -163,7 +196,101 @@
         }
     });
 
-    // FIREBASE LIVE
+    // ALARME SONORE
+    let sosAlarm = null;
+    let bpmAlertActive = false;
+
+    function startAlarm() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            function beep() {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = 880;
+                gain.gain.value = 0.5;
+                osc.start();
+                osc.stop(ctx.currentTime + 0.3);
+            }
+            beep();
+            sosAlarm = setInterval(beep, 800);
+        } catch (e) {}
+    }
+
+    function stopAlarm() {
+        if (sosAlarm) { clearInterval(sosAlarm); sosAlarm = null; }
+    }
+
+    // SOS MAP
+    let sosMap = null;
+    let sosMarker = null;
+
+    function showSos(data) {
+        const overlay = document.getElementById('sosOverlay');
+        overlay.className = 'active sos-mode';
+        document.getElementById('sosTitle').textContent = '🆘 SOS 🆘';
+        document.getElementById('sosSubtitle').textContent = 'Le porteur a besoin de secours !';
+        document.getElementById('sosTime').textContent = `⏱ ${new Date(data.timestamp).toLocaleTimeString('fr-FR')}`;
+        document.getElementById('sosCoords').textContent = `📍 ${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}`;
+        document.getElementById('sosMapContainer').style.display = 'block';
+
+        if (!sosMap) {
+            sosMap = L.map('sosMap').setView([data.lat, data.lon], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(sosMap);
+        }
+        setTimeout(() => sosMap.invalidateSize(), 100);
+        sosMap.setView([data.lat, data.lon], 15);
+
+        const sosIcon = L.divIcon({
+            html: `<div style="width:20px;height:20px;background:#ff0000;border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px rgba(255,0,0,0.8)"></div>`,
+            iconSize: [20, 20], iconAnchor: [10, 10], className: ''
+        });
+        if (sosMarker) sosMap.removeLayer(sosMarker);
+        sosMarker = L.marker([data.lat, data.lon], { icon: sosIcon }).addTo(sosMap);
+
+        startAlarm();
+    }
+
+    function showBpmAlert(hr, lat, lon) {
+        if (bpmAlertActive) return;
+        bpmAlertActive = true;
+        const overlay = document.getElementById('sosOverlay');
+        overlay.className = 'active bpm-mode';
+        document.getElementById('sosTitle').textContent = '⚠️ BPM CRITIQUE ⚠️';
+        document.getElementById('sosSubtitle').textContent = `Fréquence cardiaque anormale détectée : ${hr} bpm`;
+        document.getElementById('sosTime').textContent = `⏱ ${new Date().toLocaleTimeString('fr-FR')}`;
+        document.getElementById('sosCoords').textContent = lat && lon ? `📍 ${lat.toFixed(5)}, ${lon.toFixed(5)}` : '';
+        document.getElementById('sosMapContainer').style.display = 'none';
+        startAlarm();
+    }
+
+    function hideSos() {
+        document.getElementById('sosOverlay').className = '';
+        document.getElementById('sosTitle').textContent = '🆘 SOS 🆘';
+        document.getElementById('sosSubtitle').textContent = 'Le porteur a besoin de secours !';
+        document.getElementById('sosMapContainer').style.display = 'block';
+        bpmAlertActive = false;
+        stopAlarm();
+    }
+
+    // FIREBASE SOS
+    onValue(ref(db, 'sos'), (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.active === true) {
+            showSos(data);
+        } else if (!bpmAlertActive) {
+            hideSos();
+        }
+    });
+
+    document.getElementById('btnCancelSos').addEventListener('click', async () => {
+        await set(ref(db, 'sos'), { active: false });
+        hideSos();
+    });
+
+    // FIREBASE LIVE POSITION
     onValue(ref(db, 'position'), (snapshot) => {
         const data = snapshot.val();
         if (!data) {
@@ -172,12 +299,14 @@
             return;
         }
         const { lat, lon, timestamp: ts, heartRate: hr } = data;
+
         if (!liveMarker) {
             liveMarker = L.marker([lat, lon], { icon: liveIcon }).addTo(liveMap);
             liveMap.setView([lat, lon], 15);
         } else { liveMarker.setLatLng([lat, lon]); liveMap.panTo([lat, lon]); }
         livePoints.push([lat, lon]);
         livePolyline.setLatLngs(livePoints);
+
         document.getElementById('lat').textContent = lat.toFixed(5);
         document.getElementById('lon').textContent = lon.toFixed(5);
         document.getElementById('hr').textContent = hr ? `${hr} bpm` : '--';
@@ -185,11 +314,17 @@
         document.getElementById('statusText').textContent = 'En direct';
         const date = new Date(ts);
         document.getElementById('lastUpdate').textContent = `MAJ : ${date.toLocaleTimeString('fr-FR')}`;
+
         if (hr && hr > 0) {
             bpmChart.data.labels.push(date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
             bpmChart.data.datasets[0].data.push(hr);
             if (bpmChart.data.labels.length > 60) { bpmChart.data.labels.shift(); bpmChart.data.datasets[0].data.shift(); }
             bpmChart.update();
+
+            // Alarme BPM critique
+            if (hr < 20) {
+                showBpmAlert(hr, lat, lon);
+            }
         }
     });
 
@@ -253,7 +388,6 @@
         document.getElementById('history-infoBar').style.display = 'flex';
         document.getElementById('history-bpm-container').style.display = 'block';
 
-        // Carte
         if (!historyMap) {
             historyMap = L.map('history-map').setView([44.3, 2.7], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(historyMap);
@@ -271,37 +405,22 @@
         if (latLngs.length > 0) L.marker(latLngs[0], { icon: startIcon }).addTo(historyMap).bindPopup('Départ');
         if (latLngs.length > 1) L.marker(latLngs[latLngs.length - 1], { icon: endIcon }).addTo(historyMap).bindPopup('Arrivée');
 
-        // Stats
         const hrValues = points.map(p => p.heartRate).filter(h => h && h > 0);
         document.getElementById('h-duration').textContent = points.length > 1 ? formatDuration(points[points.length - 1].timestamp - points[0].timestamp) : '--';
         document.getElementById('h-points').textContent = points.length;
         document.getElementById('h-hr-avg').textContent = hrValues.length ? `${Math.round(hrValues.reduce((a, b) => a + b, 0) / hrValues.length)} bpm` : '--';
         document.getElementById('h-hr-max').textContent = hrValues.length ? `${Math.max(...hrValues)} bpm` : '--';
 
-        // Courbe BPM en bas
         const hCtx = document.getElementById('historyBpmChart').getContext('2d');
         if (historyBpmChart) historyBpmChart.destroy();
-
         historyBpmChart = new Chart(hCtx, {
             type: 'line',
             data: {
                 labels: points.map(p => new Date(p.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })),
-                datasets: [{
-                    data: points.map(p => p.heartRate || null),
-                    borderColor: '#f85149',
-                    backgroundColor: 'rgba(248,81,73,0.15)',
-                    borderWidth: 1.5,
-                    pointRadius: 0,
-                    pointHoverRadius: 5,
-                    tension: 0.3,
-                    spanGaps: true,
-                    fill: true
-                }]
+                datasets: [{ data: points.map(p => p.heartRate || null), borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.15)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, tension: 0.3, spanGaps: true, fill: true }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
+                responsive: true, maintainAspectRatio: false, animation: false,
                 plugins: { legend: { display: false }, tooltip: { enabled: false } },
                 scales: {
                     x: { ticks: { color: '#555', maxTicksLimit: 6, font: { size: 9 } }, grid: { color: '#222' } },
@@ -313,18 +432,11 @@
                     const idx = els[0].index;
                     const pt = currentPoints[idx];
                     if (!pt || !pt.lat) return;
-
                     if (clickMarker) historyMap.removeLayer(clickMarker);
-                    const clickIcon = L.divIcon({
-                        html: `<div style="background:#FFDD44;border:2px solid #000;border-radius:50%;width:14px;height:14px;"></div>`,
-                        iconSize: [14, 14], iconAnchor: [7, 7], className: ''
-                    });
+                    const clickIcon = L.divIcon({ html: `<div style="background:#FFDD44;border:2px solid #000;border-radius:50%;width:14px;height:14px;"></div>`, iconSize: [14, 14], iconAnchor: [7, 7], className: '' });
                     clickMarker = L.marker([pt.lat, pt.lon], { icon: clickIcon }).addTo(historyMap);
                     historyMap.panTo([pt.lat, pt.lon]);
-
-                    const time = new Date(pt.timestamp).toLocaleTimeString('fr-FR');
-                    const hr = pt.heartRate ? `${pt.heartRate} bpm` : '--';
-                    document.getElementById('click-info').textContent = `📍 ${time} · ❤️ ${hr}`;
+                    document.getElementById('click-info').textContent = `📍 ${new Date(pt.timestamp).toLocaleTimeString('fr-FR')} · ❤️ ${pt.heartRate ? pt.heartRate + ' bpm' : '--'}`;
                 }
             }
         });
