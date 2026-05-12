@@ -14,6 +14,8 @@
         #header { background: #16213e; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
         #header h1 { font-size: 16px; color: #4CAF50; }
         #status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        #btnSound { background: #333; border: 1px solid #555; color: #aaa; border-radius: 20px; padding: 4px 10px; font-size: 12px; cursor: pointer; margin-left: 8px; }
+        #btnSound.on { background: #1a3a22; border-color: #4CAF50; color: #4CAF50; }
         #statusDot { width: 10px; height: 10px; border-radius: 50%; background: #888; }
         #statusDot.active { background: #4CAF50; animation: pulse 1.5s infinite; }
         #statusDot.inactive { background: #FF4444; }
@@ -116,6 +118,7 @@
         <div id="statusDot"></div>
         <span id="statusText"></span>
     </div>
+    <button id="btnSound" onclick="toggleSound()">🔇 Son</button>
 </div>
 
 <div id="tabs">
@@ -178,15 +181,34 @@
 
     // AUDIO
     let audioCtx = null;
-    document.addEventListener('click', () => {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }, { once: true });
-
     let sosAlarm = null;
     let bpmAlertActive = false;
+    let soundEnabled = false;
+
+    window.toggleSound = function() {
+        if (!soundEnabled) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            // Bip de confirmation
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            gain.gain.value = 0.2;
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+            soundEnabled = true;
+            document.getElementById('btnSound').textContent = '🔊 Son';
+            document.getElementById('btnSound').classList.add('on');
+        } else {
+            stopAlarm();
+            soundEnabled = false;
+            document.getElementById('btnSound').textContent = '🔇 Son';
+            document.getElementById('btnSound').classList.remove('on');
+        }
+    };
 
     function startAlarm() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!soundEnabled || !audioCtx) return;
         function beep() {
             try {
                 const osc = audioCtx.createOscillator();
@@ -340,7 +362,8 @@
         const data = snapshot.val();
         if (!data) {
             document.getElementById('statusDot').className = 'inactive';
-            document.getElementById('statusText').textContent = '';
+            document.getElementById('statusText').textContent = 'Suivi inactif';
+            document.getElementById('statusText').style.color = '#FF4444';
             return;
         }
         const { lat, lon, timestamp: ts, heartRate: hr } = data;
@@ -355,6 +378,7 @@
         document.getElementById('hr').textContent = hr ? `${hr} bpm` : '--';
         document.getElementById('statusDot').className = 'active';
         document.getElementById('statusText').textContent = 'En direct';
+        document.getElementById('statusText').style.color = '#4CAF50';
         const date = new Date(ts);
         document.getElementById('lastUpdate').textContent = `MAJ : ${date.toLocaleTimeString('fr-FR')}`;
         if (hr && hr > 0) {
