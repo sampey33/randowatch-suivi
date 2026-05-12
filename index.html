@@ -329,7 +329,7 @@
         bpmAlertActive = true;
         const overlay = document.getElementById('sosOverlay');
         overlay.className = 'active bpm-mode';
-        document.getElementById('sosTitle').textContent = '⚠️ BPM CRITIQUE ⚠️';
+        document.getElementById('sosTitle').textContent = '⚠️ INACTIVITÉ BPM ⚠️';
         document.getElementById('sosSubtitle').textContent = `Fréquence cardiaque anormale : ${hr} bpm`;
         document.getElementById('sosTime').textContent = `⏱ ${new Date().toLocaleTimeString('fr-FR')}`;
         document.getElementById('sosCoords').textContent = lat && lon ? `📍 ${lat.toFixed(5)}, ${lon.toFixed(5)}` : '';
