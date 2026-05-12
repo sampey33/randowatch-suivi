@@ -185,6 +185,7 @@
     let bpmAlertActive = false;
     let soundEnabled = false;
     let lastTimestamp = null;
+    let trackingActive = false;
 
     // Activer le son au premier clic sur la page
     document.addEventListener('click', function initSound() {
@@ -366,7 +367,8 @@
         const data = snapshot.val();
         if (!data) {
             document.getElementById('statusDot').className = 'inactive';
-            document.getElementById('statusText').textContent = 'Suivi inactif';
+            trackingActive = false;
+        document.getElementById('statusText').textContent = 'Suivi inactif';
             document.getElementById('statusText').style.color = '#FF4444';
             return;
         }
@@ -382,6 +384,7 @@
         document.getElementById('lon').textContent = lon.toFixed(5);
         document.getElementById('hr').textContent = hr ? `${hr} bpm` : '--';
         document.getElementById('statusDot').className = 'active';
+        trackingActive = true;
         document.getElementById('statusText').textContent = 'En direct';
         document.getElementById('statusText').style.color = '#4CAF50';
         const date = new Date(ts);
