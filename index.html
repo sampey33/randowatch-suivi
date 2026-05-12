@@ -66,6 +66,7 @@
 <div id="infoBar">
     <div><span>Latitude : </span><strong id="lat">--</strong></div>
     <div><span>Longitude : </span><strong id="lon">--</strong></div>
+    <div><span>❤️ </span><strong id="hr">--</strong></div>
     <div><span id="lastUpdate">Derniere mise a jour : --</span></div>
 </div>
 
@@ -130,6 +131,8 @@
         // Mettre à jour les infos
         document.getElementById('lat').textContent = lat.toFixed(5);
         document.getElementById('lon').textContent = lon.toFixed(5);
+        const hr = data.heartRate;
+        document.getElementById('hr').textContent = hr ? `${hr} bpm` : '--';
         document.getElementById('statusDot').className = 'active';
         document.getElementById('statusText').textContent = 'En direct';
 
