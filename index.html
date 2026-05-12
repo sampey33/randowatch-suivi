@@ -367,6 +367,7 @@
             return;
         }
         const { lat, lon, timestamp: ts, heartRate: hr } = data;
+        lastTimestamp = ts;
         if (!liveMarker) {
             liveMarker = L.marker([lat, lon], { icon: liveIcon }).addTo(liveMap);
             liveMap.setView([lat, lon], 15);
@@ -395,6 +396,16 @@
     let historyBpmChart = null;
     let clickMarker = null;
     let currentPoints = [];
+    let lastTimestamp = null;
+
+    // Vérifier toutes les 10 secondes si les données sont obsolètes
+    setInterval(() => {
+        if (!lastTimestamp) return;
+        const age = Date.now() - lastTimestamp;
+        if (age > 30000) {
+            showBpmAlert(0, null, null);
+        }
+    }, 10000);
 
     document.getElementById('btnDeleteAll').addEventListener('click', async () => {
         if (confirm('Supprimer toutes les sessions ?')) {
