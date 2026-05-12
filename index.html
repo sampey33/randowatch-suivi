@@ -186,17 +186,20 @@
     let soundEnabled = false;
     let lastTimestamp = null;
 
+    // Activer le son au premier clic sur la page
+    document.addEventListener('click', function initSound() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            soundEnabled = true;
+            document.getElementById('btnSound').textContent = '🔊 Son';
+            document.getElementById('btnSound').classList.add('on');
+        }
+        document.removeEventListener('click', initSound);
+    });
+
     window.toggleSound = function() {
         if (!soundEnabled) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            // Bip de confirmation
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            gain.gain.value = 0.2;
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.1);
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             soundEnabled = true;
             document.getElementById('btnSound').textContent = '🔊 Son';
             document.getElementById('btnSound').classList.add('on');
